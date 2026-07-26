@@ -815,12 +815,14 @@ local UISystem = {
     Elements = {},
     MainWindow = nil,
     Tabs = {},
-    CurrentTab = "Aimbot"
+    CurrentTab = "Aimbot",
+    Links = {
+        Website = "https://guns.lol/bos3id",
+        Discord = "https://discord.gg/a-vn"
+    }
 }
 
 function UISystem:CreateWindow(title)
-    -- Main window would be created here using Drawing API
-    -- For this version, we're creating a foundation
     Logger:Info("UI System initialized - " .. title)
 end
 
@@ -870,25 +872,41 @@ UISystem:AddTab("Visuals")
 UISystem:AddTab("Settings")
 UISystem:AddTab("Me")
 
+-- Add buttons to "Me" tab
+UISystem:AddButton("Me", "⤷ Website: guns.lol/bos3id", function()
+    NotificationSystem:Show("Website", "Visit: https://guns.lol/bos3id", "INFO")
+    Logger:Info("Website: https://guns.lol/bos3id")
+end)
+
+UISystem:AddButton("Me", "⤷ Discord: discord.gg/a-vn", function()
+    NotificationSystem:Show("Discord", "Join: https://discord.gg/a-vn", "SUCCESS")
+    Logger:Info("Discord: https://discord.gg/a-vn")
+end)
+
+UISystem:AddButton("Me", "Made by: Professional Team", function()
+    NotificationSystem:Show("About", "Abyss Paragon V2 Premium Edition v2.5.0", "INFO")
+end)
+
 -- // [KEYBIND SETUP]
 KeybindSystem:Init()
 KeybindSystem:Register("ToggleAimbot", Enum.KeyCode.F6, function()
     Targeting.Config.Enabled = not Targeting.Config.Enabled
-    NotificationSystem:Show("Aimbot", Targeting.Config.Enabled and "Enabled" or "Disabled", 
+    NotificationSystem:Show("Aimbot", Targeting.Config.Enabled and "Enabled ✓" or "Disabled ✗", 
         Targeting.Config.Enabled and "SUCCESS" or "INFO")
 end)
 
 KeybindSystem:Register("ToggleESP", Enum.KeyCode.F7, function()
     ESP.Config.Enabled = not ESP.Config.Enabled
-    NotificationSystem:Show("ESP", ESP.Config.Enabled and "Enabled" or "Disabled",
+    NotificationSystem:Show("ESP", ESP.Config.Enabled and "Enabled ✓" or "Disabled ✗",
         ESP.Config.Enabled and "SUCCESS" or "INFO")
 end)
 
 KeybindSystem:Register("Unload", Enum.KeyCode.RightShift, function()
-    Logger:Warn("Unloading script...")
+    Logger:Warn("Unloading Abyss Paragon V2 Premium...")
     DrawPool:Cleanup()
     Services.RunService.RenderStepped:Wait()
     _G[_KEY] = nil
+    NotificationSystem:Show("Unload", "Script unloaded successfully", "WARNING")
 end)
 
 -- // [MAIN LOOP]
@@ -912,8 +930,8 @@ Services.RunService.RenderStepped:Connect(function()
 end)
 
 Logger:Success("=== ABYSS PARAGON V2 PREMIUM LOADED SUCCESSFULLY ===")
-Logger:Info("Version: 2.5.0 | FPS: " .. PerfOptimizer:GetFPS())
+Logger:Info("Version: 2.5.0 | Build: 20260726")
 Logger:Info("Keybinds: F6=Aimbot | F7=ESP | RightShift=Unload")
-Logger:Info("Discord: discord.gg/AbyssParagon | Website: abyssparagon.xyz")
+Logger:Info("Website: https://guns.lol/bos3id | Discord: https://discord.gg/a-vn")
 
 NotificationSystem:Show("Welcome", "Abyss Paragon V2 Premium Loaded!", "SUCCESS")
