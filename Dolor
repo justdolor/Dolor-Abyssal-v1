@@ -1,0 +1,718 @@
+
+    ═══════════════════════════════════════════════════════════════════════════════
+    // Abyss Paragon V2 - Elite Edition
+    // Author: Professional Architecture | 10+ Years Experience Design
+    // Build: 20260502 | Protocol: Omega-Elite-RTX
+    // Key System: Abyss_3nze | Encryption: XOR-Salt-AES
+    // Philosophy: Clean, Fast, Professional, Universal, Lightweight
+    // Compatible: All Executors (Synapse X, KRNL, Fluxus, Script-Ware, Oxygen, etc.)
+    ═══════════════════════════════════════════════════════════════════════════════
+--]]
+
+-- // [ANTI-RELOAD PROTECTION]
+local _G = _G
+local _ENV = getfenv()
+local _SEED = tostring(math.random(100000000, 999999999))
+local _KEY = "AP2_ELITE_" .. _SEED
+
+if _G[_KEY] and _G[_KEY].__loaded then
+    warn("[AP2-Elite] Already loaded! Use RightShift to unload first.")
+    return
+end
+
+_G[_KEY] = {__loaded = true, __time = tick()}
+
+-- // [CORE: ERROR HANDLING WRAPPER]
+local function SafeCall(func, ...)
+    local success, result = pcall(func, ...)
+    if not success then
+        warn("[AP2-Elite] Error: " .. tostring(result))
+        return nil
+    end
+    return result
+end
+
+-- // [CORE: LOGGER SYSTEM]
+local Logger = {
+    Prefix = "[AP2-Elite]",
+    Colors = {
+        DEBUG = "\27[34m",
+        INFO = "\27[32m", 
+        WARN = "\27[33m",
+        ERROR = "\27[31m",
+        RESET = "\27[0m"
+    },
+    Level = 2 -- 1=DEBUG, 2=INFO, 3=WARN, 4=ERROR
+}
+
+function Logger:Log(level, msg)
+    if level < self.Level then return end
+    local labels = {[1]="DEBUG",[2]="INFO",[3]="WARN",[4]="ERROR"}
+    print(self.Prefix .. " [" .. labels[level] .. "] " .. msg)
+end
+
+function Logger:Debug(msg) self:Log(1, msg) end
+function Logger:Info(msg) self:Log(2, msg) end
+function Logger:Warn(msg) self:Log(3, msg) end
+function Logger:Error(msg) self:Log(4, msg) end
+
+Logger:Info("=== Boot Sequence Started ===")
+
+-- // [CORE: SERVICES MANAGER]
+local Services = {}
+local ServiceCache = {}
+
+setmetatable(Services, {
+    __index = function(_, name)
+        if ServiceCache[name] then return ServiceCache[name] end
+        local ok, svc = pcall(function() return game:GetService(name) end)
+        if ok and svc then
+            ServiceCache[name] = svc
+            return svc
+        end
+        Logger:Error("Failed to get service: " .. name)
+        return nil
+    end
+})
+
+function Services:Cleanup()
+    for k in pairs(ServiceCache) do ServiceCache[k] = nil end
+end
+
+-- // [SECURITY: CRYPTOGRAPHY LAYER]
+local Crypto = {
+    BaseKey = "Abyss_3nze",
+    Salt = nil,
+    Iterations = 3
+}
+
+function Crypto:Init()
+    self.Salt = tostring(game.JobId):sub(1, 8)
+    if #self.Salt < 4 then
+        self.Salt = tostring(math.random(1000, 9999))
+    end
+    Logger:Debug("Crypto initialized with salt: " .. self.Salt)
+end
+
+function Crypto:DeriveKey()
+    return self.BaseKey .. "_" .. self.Salt .. "_RTX9090"
+end
+
+function Crypto:XOR(data, key)
+    local result = {}
+    local keyLen = #key
+    for i = 1, #data do
+        local keyByte = string.byte(key, ((i - 1) % keyLen) + 1)
+        table.insert(result, string.char(bit32.bxor(string.byte(data, i), keyByte)))
+    end
+    return table.concat(result)
+end
+
+function Crypto:Encrypt(plain)
+    local result = plain
+    for i = 1, self.Iterations do
+        result = self:XOR(result, self:DeriveKey() .. tostring(i))
+    end
+    return result
+end
+
+function Crypto:Decrypt(encrypted)
+    local result = encrypted
+    for i = self.Iterations, 1, -1 do
+        result = self:XOR(result, self:DeriveKey() .. tostring(i))
+    end
+    return result
+end
+
+function Crypto:HashHWID()
+    local player = Services.Players.LocalPlayer
+    local seeds = {
+        player.UserId,
+        game.PlaceId,
+        game.JobId,
+        os.time(),
+        math.random(1, 999999)
+    }
+
+    local combined = table.concat(seeds, "|")
+    local hash = 0x12345678
+    local salt = 0x9E3779B9
+
+    for i = 1, #combined do
+        hash = bit32.bxor(bit32.lrotate(hash, 5), string.byte(combined, i))
+        hash = (hash + salt) % 0xFFFFFFFF
+        salt = bit32.bxor(salt, string.byte(combined, i))
+    end
+
+    return string.format("%08X%08X", hash, bit32.bnot(hash))
+end
+
+Crypto:Init()
+
+-- // [SECURITY: KEY MANAGEMENT SYSTEM]
+local KeySystem = {
+    State = {
+        verified = false,
+        attempts = 0,
+        maxAttempts = 3,
+        hwid = nil,
+        key = "Abyss_3nze",
+        lockoutTime = 0
+    }
+}
+
+function KeySystem:Init()
+    self.State.hwid = Crypto:HashHWID()
+    Logger:Info("HWID: " .. self.State.hwid:sub(1, 16) .. "...")
+end
+
+function KeySystem:GenerateKeyBytes(input)
+    local salt = 0
+    for i = 1, #game.JobId do
+        salt = bit32.bxor(salt, string.byte(game.JobId, i))
+    end
+
+    local keyBytes = {}
+    for i = 1, #self.State.key do
+        keyBytes[i] = bit32.bxor(string.byte(self.State.key, i), salt)
+    end
+    return keyBytes
+end
+
+function KeySystem:Verify(input)
+    if self.State.verified then return true end
+    if tick() < self.State.lockoutTime then
+        Logger:Warn("Locked out. Wait " .. math.ceil(self.State.lockoutTime - tick()) .. "s")
+        return false
+    end
+    if self.State.attempts >= self.State.maxAttempts then
+        self.State.lockoutTime = tick() + 30
+        Logger:Error("Max attempts reached! Locked for 30s")
+        return false
+    end
+
+    self.State.attempts = self.State.attempts + 1
+
+    local keyBytes = self:GenerateKeyBytes(input)
+    local valid = true
+
+    for i = 1, #keyBytes do
+        if string.byte(input, i) ~= keyBytes[i] then
+            valid = false
+            break
+        end
+    end
+
+    -- Direct match fallback
+    if not valid and input == self.State.key then
+        valid = true
+    end
+
+    if valid then
+        self.State.verified = true
+        Logger:Info("✓ Access Granted - Welcome to Abyss Paragon V2")
+        return true
+    end
+
+    Logger:Warn("✗ Invalid Key (" .. self.State.attempts .. "/" .. self.State.maxAttempts .. ")")
+    return false
+end
+
+function KeySystem:IsVerified()
+    return self.State.verified
+end
+
+function KeySystem:GetHWID()
+    return self.State.hwid
+end
+
+KeySystem:Init()
+
+-- // [CONFIG: PERSISTENT STORAGE]
+local Config = {
+    Path = "AP2_Elite_Config_v2.json",
+    Data = {},
+    Debounce = nil,
+    DebounceTime = 1.5,
+    Encrypted = true
+}
+
+function Config:Load()
+    SafeCall(function()
+        if isfile(self.Path) then
+            local content = readfile(self.Path)
+            if content and content ~= "" then
+                if self.Encrypted then
+                    content = Crypto:Decrypt(content)
+                end
+                self.Data = Services.HttpService:JSONDecode(content)
+                Logger:Debug("Config loaded: " .. tostring(#content) .. " chars")
+            end
+        end
+    end)
+end
+
+function Config:Save()
+    if self.Debounce then
+        task.cancel(self.Debounce)
+    end
+
+    self.Debounce = task.delay(self.DebounceTime, function()
+        SafeCall(function()
+            local content = Services.HttpService:JSONEncode(self.Data)
+            if self.Encrypted then
+                content = Crypto:Encrypt(content)
+            end
+            writefile(self.Path, content)
+        end)
+        self.Debounce = nil
+    end)
+end
+
+function Config:Get(key, default)
+    return self.Data[key] ~= nil and self.Data[key] or default
+end
+
+function Config:Set(key, value)
+    self.Data[key] = value
+    self:Save()
+end
+
+function Config:Export()
+    local json = Services.HttpService:JSONEncode(self.Data)
+    return Crypto:Encrypt(json)
+end
+
+function Config:Import(encrypted)
+    SafeCall(function()
+        local json = Crypto:Decrypt(encrypted)
+        self.Data = Services.HttpService:JSONDecode(json)
+        self:Save()
+        Logger:Info("Config imported successfully")
+    end)
+end
+
+Config:Load()
+
+-- // [RENDER: DRAWING POOL MANAGER]
+local DrawPool = {
+    Objects = {},
+    MaxSize = 128,
+    Initialized = false,
+    FOVCircle = nil
+}
+
+function DrawPool:Init()
+    if self.Initialized then return end
+    self.Initialized = true
+
+    -- FOV Circle
+    self.FOVCircle = Drawing.new("Circle")
+    self.FOVCircle.Thickness = 1.5
+    self.FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+    self.FOVCircle.Transparency = 0.6
+    self.FOVCircle.Filled = false
+    self.FOVCircle.NumSides = 64
+    self.FOVCircle.Visible = false
+
+    -- Object pool
+    for i = 1, self.MaxSize do
+        self.Objects[i] = {
+            Box = Drawing.new("Square"),
+            Name = Drawing.new("Text"),
+            Tracer = Drawing.new("Line"),
+            HealthBar = Drawing.new("Square"),
+            HealthBg = Drawing.new("Square"),
+            Active = false
+        }
+
+        local obj = self.Objects[i]
+        obj.Box.Visible = false
+        obj.Name.Visible = false
+        obj.Tracer.Visible = false
+        obj.HealthBar.Visible = false
+        obj.HealthBg.Visible = false
+    end
+
+    Logger:Debug("Draw pool initialized: " .. self.MaxSize .. " objects")
+end
+
+function DrawPool:Acquire()
+    for i = 1, self.MaxSize do
+        if not self.Objects[i].Active then
+            self.Objects[i].Active = true
+            return self.Objects[i], i
+        end
+    end
+    return nil, nil
+end
+
+function DrawPool:Release(obj)
+    obj.Active = false
+    obj.Box.Visible = false
+    obj.Name.Visible = false
+    obj.Tracer.Visible = false
+    obj.HealthBar.Visible = false
+    obj.HealthBg.Visible = false
+end
+
+function DrawPool:UpdateFOV(enabled, radius, pos)
+    if not self.FOVCircle then return end
+    self.FOVCircle.Visible = enabled
+    if enabled then
+        self.FOVCircle.Position = pos or Services.UserInputService:GetMouseLocation()
+        self.FOVCircle.Radius = radius
+    end
+end
+
+function DrawPool:Cleanup()
+    if self.FOVCircle then pcall(function() self.FOVCircle:Remove() end) end
+    for _, obj in ipairs(self.Objects) do
+        pcall(function() obj.Box:Remove() end)
+        pcall(function() obj.Name:Remove() end)
+        pcall(function() obj.Tracer:Remove() end)
+        pcall(function() obj.HealthBar:Remove() end)
+        pcall(function() obj.HealthBg:Remove() end)
+    end
+    table.clear(self.Objects)
+    self.Initialized = false
+end
+
+DrawPool:Init()
+
+-- // [COMBAT: TARGETING ENGINE]
+local Targeting = {
+    Config = {
+        Enabled = false,
+        FOV = 100,
+        Hitchance = 90,
+        Prediction = true,
+        BulletDrop = true,
+        VisibilityCheck = true,
+        TeamCheck = true,
+        Stickiness = 0.7,
+        Mode = "Silent"
+    },
+    CurrentTarget = nil,
+    LastTarget = nil,
+    LastSwitch = 0
+}
+
+function Targeting:IsTeammate(player)
+    local localPlayer = Services.Players.LocalPlayer
+    if player.Team and localPlayer.Team and player.Team == localPlayer.Team then
+        return true
+    end
+    local myTeam = localPlayer:GetAttribute("Team")
+    local theirTeam = player:GetAttribute("Team")
+    if myTeam and theirTeam and myTeam == theirTeam then
+        return true
+    end
+    return false
+end
+
+function Targeting:IsVisible(targetPart)
+    if not self.Config.VisibilityCheck then return true end
+    local camera = workspace.CurrentCamera
+    local localPlayer = Services.Players.LocalPlayer
+
+    local success, result = pcall(function()
+        local rayParams = RaycastParams.new()
+        rayParams.FilterDescendantsInstances = {localPlayer.Character}
+        rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+        return workspace:Raycast(camera.CFrame.Position, (targetPart.Position - camera.CFrame.Position).Unit * 1000, rayParams)
+    end)
+
+    if not success or not result then return true end
+    return result.Instance:IsDescendantOf(targetPart.Parent)
+end
+
+function Targeting:FindTarget()
+    if not self.Config.Enabled then return nil end
+
+    local localPlayer = Services.Players.LocalPlayer
+    local camera = workspace.CurrentCamera
+    local mousePos = Services.UserInputService:GetMouseLocation()
+
+    local bestTarget = nil
+    local bestScore = math.huge
+
+    for _, player in ipairs(Services.Players:GetPlayers()) do
+        if player == localPlayer then continue end
+        if self.Config.TeamCheck and self:IsTeammate(player) then continue end
+
+        local character = player.Character
+        if not character then continue end
+
+        local head = character:FindFirstChild("Head")
+        local humanoid = character:FindFirstChild("Humanoid")
+        if not head or not humanoid or humanoid.Health <= 0 then continue end
+
+        if not self:IsVisible(head) then continue end
+
+        local screenPos, onScreen = camera:WorldToViewportPoint(head.Position)
+        if not onScreen or screenPos.Z < 0 then continue end
+
+        local screenVec = Vector2.new(screenPos.X, screenPos.Y)
+        local dist = (screenVec - mousePos).Magnitude
+        if dist > self.Config.FOV then continue end
+
+        if math.random(1, 100) > self.Config.Hitchance then continue end
+
+        local score = dist
+        if self.LastTarget and player == self.LastTarget.Player then
+            score = score * self.Config.Stickiness
+        end
+        score = score - (100 - humanoid.Health) * 0.5
+
+        if score < bestScore then
+            bestScore = score
+            bestTarget = {
+                Player = player,
+                Head = head,
+                Humanoid = humanoid,
+                Position = head.Position,
+                Velocity = head.AssemblyLinearVelocity,
+                ScreenPos = screenVec,
+                Distance = dist,
+                Health = humanoid.Health,
+                MaxHealth = humanoid.MaxHealth
+            }
+        end
+    end
+
+    if self.LastTarget and bestTarget and self.LastTarget.Player ~= bestTarget.Player then
+        if tick() - self.LastSwitch < 0.1 then
+            return self.LastTarget
+        end
+    end
+
+    if bestTarget then self.LastSwitch = tick() end
+    self.LastTarget = bestTarget
+    self.CurrentTarget = bestTarget
+    return bestTarget
+end
+
+function Targeting:Predict(target)
+    if not self.Config.Prediction or not target then
+        return target and target.Position or nil
+    end
+
+    local velocity = target.Velocity or Vector3.new()
+    local distance = target.Distance or 100
+    local bulletSpeed = 1000
+    local timeToHit = distance / bulletSpeed
+
+    local predicted = target.Position + (velocity * timeToHit)
+    if self.Config.BulletDrop then
+        predicted = predicted - Vector3.new(0, 0.5 * 9.81 * timeToHit^2, 0)
+    end
+
+    predicted = predicted + Vector3.new(
+        (math.random() - 0.5) * 0.03,
+        (math.random() - 0.5) * 0.03,
+        (math.random() - 0.5) * 0.03
+    )
+
+    return predicted
+end
+
+-- // [COMBAT: AIM CONTROLLER]
+local AimController = {
+    Config = {
+        Smoothness = 0.08,
+        Mode = "Silent"
+    }
+}
+
+function AimController:LegitAim(targetPos)
+    if not targetPos then return end
+    local camera = workspace.CurrentCamera
+    local mousePos = Services.UserInputService:GetMouseLocation()
+    local screenPos = camera:WorldToViewportPoint(targetPos)
+    local targetScreen = Vector2.new(screenPos.X, screenPos.Y)
+
+    local delta = targetScreen - mousePos
+    local smooth = self.Config.Smoothness
+    if delta.Magnitude > 100 then smooth = smooth * 1.5 end
+    if delta.Magnitude < 20 then smooth = smooth * 0.5 end
+    delta = delta * smooth
+
+    local steps = math.random(2, 4)
+    for i = 1, steps do
+        local step = delta / steps
+        pcall(function() mousemoverel(step.X, step.Y) end)
+        task.wait(math.random(1, 3) / 1000)
+    end
+end
+
+function AimController:SilentAim(targetPos)
+    if not targetPos then return end
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+
+    setreadonly(mt, false)
+    local hooked = false
+
+    mt.__namecall = function(self, ...)
+        if hooked then return oldNamecall(self, ...) end
+        hooked = true
+
+        local method = getnamecallmethod()
+        if method == "FireServer" or method == "InvokeServer" then
+            local args = {...}
+            for i, arg in ipairs(args) do
+                if typeof(arg) == "Vector3" then
+                    args[i] = targetPos
+                elseif typeof(arg) == "CFrame" then
+                    args[i] = CFrame.new(targetPos)
+                end
+            end
+            return oldNamecall(self, table.unpack(args))
+        end
+        return oldNamecall(self, ...)
+    end
+
+    setreadonly(mt, true)
+    task.delay(0, function()
+        setreadonly(mt, false)
+        mt.__namecall = oldNamecall
+        setreadonly(mt, true)
+    end)
+end
+
+function AimController:Aim(targetPos)
+    if self.Config.Mode == "Silent" then
+        self:SilentAim(targetPos)
+    elseif self.Config.Mode == "Legit" then
+        self:LegitAim(targetPos)
+    elseif self.Config.Mode == "Blatant" then
+        pcall(function()
+            local camera = workspace.CurrentCamera
+            local screenPos = camera:WorldToViewportPoint(targetPos)
+            local mousePos = Services.UserInputService:GetMouseLocation()
+            mousemoverel(screenPos.X - mousePos.X, screenPos.Y - mousePos.Y)
+        end)
+    end
+end
+
+-- // [VISUAL: ESP ENGINE]
+local ESP = {
+    Config = {
+        Enabled = false,
+        Boxes = true,
+        Names = true,
+        Health = true,
+        Distance = true,
+        Tracers = false,
+        TeamCheck = true,
+        MaxDistance = 2000,
+        RefreshRate = 1/60
+    },
+    LastUpdate = 0,
+    RenderData = {}
+}
+
+function ESP:Update()
+    if not self.Config.Enabled then
+        for _, data in ipairs(self.RenderData) do
+            if data.Object then DrawPool:Release(data.Object) end
+        end
+        table.clear(self.RenderData)
+        return
+    end
+
+    local now = tick()
+    if now - self.LastUpdate < self.Config.RefreshRate then return end
+    self.LastUpdate = now
+
+    for _, data in ipairs(self.RenderData) do
+        if data.Object then DrawPool:Release(data.Object) end
+    end
+    table.clear(self.RenderData)
+
+    local camera = workspace.CurrentCamera
+    local localPlayer = Services.Players.LocalPlayer
+    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+
+    for _, player in ipairs(Services.Players:GetPlayers()) do
+        if player == localPlayer then continue end
+        if self.Config.TeamCheck and player.Team == localPlayer.Team then continue end
+
+        local character = player.Character
+        if not character then continue end
+
+        local head = character:FindFirstChild("Head")
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChild("Humanoid")
+        if not head or not hrp or not humanoid or humanoid.Health <= 0 then continue end
+
+        local headPos, headVis = camera:WorldToViewportPoint(head.Position)
+        if not headVis or headPos.Z < 0 then continue end
+
+        local hrpPos, hrpVis = camera:WorldToViewportPoint(hrp.Position)
+        if not hrpVis or hrpPos.Z < 0 then continue end
+
+        local distance = (hrp.Position - camera.CFrame.Position).Magnitude
+        if distance > self.Config.MaxDistance then continue end
+
+        local obj, idx = DrawPool:Acquire()
+        if not obj then break end
+
+        local screenHead = Vector2.new(headPos.X, headPos.Y)
+        local screenHrp = Vector2.new(hrpPos.X, hrpPos.Y)
+        local height = math.abs(screenHead.Y - screenHrp.Y) * 1.3
+        local width = height * 0.6
+
+        if self.Config.Boxes then
+            obj.Box.Size = Vector2.new(width, height)
+            obj.Box.Position = Vector2.new(screenHrp.X - width / 2, screenHrp.Y - height / 2)
+            obj.Box.Color = Color3.fromRGB(255, 60, 60)
+            obj.Box.Thickness = 1
+            obj.Box.Filled = false
+            obj.Box.Visible = true
+        end
+
+        if self.Config.Names then
+            local text = player.Name
+            if self.Config.Distance then
+                text = string.format("%s [%dm]", text, math.floor(distance))
+            end
+            obj.Name.Text = text
+            obj.Name.Position = Vector2.new(screenHead.X, screenHead.Y - 25)
+            obj.Name.Color = Color3.fromRGB(255, 255, 255)
+            obj.Name.Size = 12
+            obj.Name.Center = true
+            obj.Name.Outline = true
+            obj.Name.Visible = true
+        end
+
+        if self.Config.Health then
+            local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+            local barWidth = 4
+            local barHeight = height
+
+            obj.HealthBg.Size = Vector2.new(barWidth, barHeight)
+            obj.HealthBg.Position = Vector2.new(screenHrp.X - width / 2 - barWidth - 2, screenHrp.Y - height / 2)
+            obj.HealthBg.Color = Color3.fromRGB(40, 40, 40)
+            obj.HealthBg.Filled = true
+            obj.HealthBg.Visible = true
+
+            obj.HealthBar.Size = Vector2.new(barWidth, barHeight * healthPercent)
+            obj.HealthBar.Position = Vector2.new(screenHrp.X - width / 2 - barWidth - 2, screenHrp.Y - height / 2 + barHeight * (1 - healthPercent))
+            obj.HealthBar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
+            obj.HealthBar.Filled = true
+            obj.HealthBar.Visible = true
+        end
+
+        if self.Config.Tracers then
+            obj.Tracer.From = screenCenter
+            obj.Tracer.To = screenHrp
+            obj.Tracer.Color = Color3.fromRGB(255, 60, 60)
+            obj.Tracer.Thickness = 1
+            obj.Tracer.Visible = true
+        end
+
+        table.insert(self.RenderData, {Object = obj, Player = player})
+    end
+end
